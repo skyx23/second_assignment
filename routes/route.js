@@ -7,7 +7,7 @@ const Client = require('../schema/clients')
 //route to regiester new user
 router.post
 ('/register', async(req,res) => {
-    
+
     const name = await Client.find({username : req.body.username});
     if (name.length != 0) {  return res.send("username already exits")}
 
@@ -35,17 +35,21 @@ router.post
     }
 });
 
+// route to login user
 router.post('/login',async(req,res) => {
-   
+    
+    // to check whether username exists
     const user =  await Client.findOne({username : req.body.username});
     if(!user ) { return res.send("Username entered is invalid")}
     
+    // to check for correct password
     const password = await bcrypt.compare(req.body.password,user.password);
     if (!password) { return res.send("password entered for the username is incorrect")}
 
     res.status(500).header('Token',user._id).send(`logged -in`)
 });
 
+// route to get user details
 router.get('/get',async(req,res) => {
     const token =  req.headers.token
     if (!token) {return res.send("Login required : Please login before accessing protected routes")} 
@@ -61,6 +65,7 @@ router.get('/get',async(req,res) => {
     
 });
 
+// route to delete request
 router.put('/delete', async(req,res) => {
     try{
     const token =  req.headers.token
@@ -77,6 +82,7 @@ router.put('/delete', async(req,res) => {
     }
 });
 
+// route to get all users 
 router.get('/list/:page', async(req,res) => {
     const page = parseInt(req.params.page)
     if (page < 0) { return res.send("Invalid request")}
