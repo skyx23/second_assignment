@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 
 const Client = require('../schema/clients');
 const Access = require('../schema/access_token');
+const Forgot = require('../schema/for_pass');
 
 //route to regiester new user
 router.post('/register', async (req, res) => {
@@ -56,7 +57,7 @@ router.post('/login', async (req, res) => {
     return res.send('password entered for the username is incorrect');
   }
 
-  await Access.deleteMany();
+  
   const token = Math.floor(Math.random() * 10 ** 16);
 
   const access = new Access({
@@ -66,7 +67,6 @@ router.post('/login', async (req, res) => {
 
   try {
     const savedAccess = await access.save();
-    console.log(savedAccess);
     res.status(500).header('Token', token).send(`logged-in`);
   } catch (err) {
     res.send(err);
@@ -105,7 +105,7 @@ router.put('/delete', async (req, res) => {
     const token = req.headers.token;
     if (!token) {
       return res.send(
-        'Login required : Please login before accessing protected routes'
+        'Login required : Please login before acces6012541ee340a974d5ab894bsing protected routes'
       );
     }
 
@@ -145,8 +145,101 @@ router.get('/list/:page', async (req, res) => {
   }
 });
 
-router.post('/address' , async (req,res) =>{
-    res.send('address added')
+router.post('/address', async (req,res)=> {
+
+    try {
+        const token = req.headers.token;
+        if (!token) {
+          return res.send(
+            'Login required : Please login before accessing protected routes'
+          );
+        }
+    
+        const valid = await await Access.findOne({ access_token: token }, function(err,user){
+            if(user.expired()){
+                return res.send("login expired")
+            }
+        })
+        const user = await Client.findOne({ _id: valid.user_id });
+        const address = await Client.update({username:user.username},{$push : {address :{
+        id : user._id,
+        address : req.body.address,
+        city : req.body.city,
+        state : req.body.state, 
+        pin_code : req.body.pin_code,
+        phone_no : req.body.phone_no}}})
+
+        res.header('address-id',user._id).send(`address updates`);
+      } catch (err) {
+        res.send('Insertion Error');
+      }
+    
 })
+
+router.get('/get/:id' , async (req,res) =>{
+    const user_id = req.params.id
+    try {
+        const token = req.headers.token;
+        if (!token) {
+          return res.send(
+            'Login required : Please login before accessing protected routes'
+          );
+        }
+    
+        const valid = await await Access.findOne({ access_token: token }, function(err,user){
+            if(user.expired()){
+                return res.send("login expired")
+            }
+        })
+        const user = await Client.findOne({ _id: user_id });
+        res.send(user.address)
+      } catch (err) {
+        res.send('deletion Error');
+      }
+})
+
+router.post('/forgotpassword', async (req,res) => {
+    try {
+        const user = await Client.findOne({username : req.body.username , email : req.body.email})
+        if (!user) { return res.send(`credentials entered are wrong`)}
+
+        const token = Math.floor(Math.random() * 10 ** 16);
+        const forgot = new Forgot({
+            username : req.body.username,
+            email : req.body.email,
+            forgot_token : token,
+        })
+        await forgot.save();
+        res.header('forgot_token',token).send(`use reset password link and forgot_token to reset password`)
+    }catch(err){
+        console.log(err)
+        res.send(`could not reset password`);
+    }
+})
+
+router.post('/resetpassword', async (req,res) => {
+    try{
+        const token = req.headers.forgot_token;
+        const forgot = await Forgot.findOne({forgot_token : token}, function (err,user){
+            if (user.expired()){
+                return res.send(`reset token expired`)
+            }
+        })
+        if (req.body.password != req.body.confirm_password){
+            return res.send('passwords do not match')
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const password = await bcrypt.hash(req.body.password, salt);
+
+        const user = await Client.updateOne({username: req.body.username},{password : password});
+        res.send(`password has been successfully updated`)
+
+    }catch(err){
+        console.log(err)
+        res.send(`could not reset password`);
+    }
+})
+
 
 module.exports = router;

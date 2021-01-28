@@ -27,6 +27,9 @@ const clients = mongoose.Schema(
       required: true,
       max: 1024,
     },
+    address : {
+      type : Array
+    }
   },
   { versionKey: false }
 );

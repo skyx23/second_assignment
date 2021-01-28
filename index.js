@@ -1,9 +1,9 @@
 // Importing and initializing Express
 const express = require('express');
 const app = express();
-// Importing mongoose ORM for Mongodb
+// Importing mongoose OGETRM for Mongodb
 const mongoose = require('mongoose');
-// importing defined routes
+// importing defined routesGETGET
 const routes = require('./routes/route');
 // importing dotenv
 const dotenv = require('dotenv');
