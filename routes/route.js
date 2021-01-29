@@ -1,39 +1,41 @@
 const router = require('express').Router();
-
+const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+dotenv.config();
 
+const verify = require('../middleware/auth');
 const Client = require('../schema/clients');
-const Access = require('../schema/access_token');
-const Forgot = require('../schema/for_pass');
+const Address = require('../schema/address');
 
 //route to regiester new user
 router.post('/register', async (req, res) => {
-  const name = await Client.find({ username: req.body.username });
-  if (name.length != 0) {
-    return res.send('username already exits');
-  }
-
-  const email = await Client.find({ email: req.body.email });
-  if (email.length != 0) {
-    return res.send('email already exits');
-  }
-
-  if (req.body.password != req.body.confirm_password) {
-    return res.send('Password do not match');
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const password = await bcrypt.hash(req.body.password, salt);
-
-  const client = new Client({
-    first_name: req.body.first_name,
-    last_name: req.body.last_name,
-    username: req.body.username,
-    email: req.body.email,
-    password: password,
-  });
-
   try {
+    const name = await Client.find({ username: req.body.username });
+    if (name.length != 0) {
+      return res.send('username already exits');
+    }
+
+    const email = await Client.find({ email: req.body.email });
+    if (email.length != 0) {
+      return res.send('email already exits');
+    }
+
+    if (req.body.password != req.body.confirm_password) {
+      return res.send('Password do not match');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password = await bcrypt.hash(req.body.password, salt);
+
+    const client = new Client({
+      first_name: req.body.first_name,
+      last_name: req.body.last_name,
+      username: req.body.username,
+      email: req.body.email,
+      password: password,
+    });
+
     const savedClient = await client.save();
     res.send(
       `You have regiseterd with username :  ${client.username} and email : ${client.email} !!!!`
@@ -45,28 +47,23 @@ router.post('/register', async (req, res) => {
 
 // route to login user
 router.post('/login', async (req, res) => {
-  // to check whether username exists
-  const user = await Client.findOne({ username: req.body.username });
-  if (!user) {
-    return res.send('Username entered is invalid');
-  }
-
-  // to check for correct password
-  const password = await bcrypt.compare(req.body.password, user.password);
-  if (!password) {
-    return res.send('password entered for the username is incorrect');
-  }
-
-  
-  const token = Math.floor(Math.random() * 10 ** 16);
-
-  const access = new Access({
-    access_token: token,
-    user_id: user._id,
-  });
-
   try {
-    const savedAccess = await access.save();
+    // to check whether username exists
+    const user = await Client.findOne({ username: req.body.username });
+    if (!user) {
+      return res.send('Username entered is invalid');
+    }
+
+    // to check for correct password
+    const password = await bcrypt.compare(req.body.password, user.password);
+    if (!password) {
+      return res.send('password entered for the username is incorrect');
+    }
+
+    const token = jwt.sign({ _id: user._id }, process.env.SECRET, {
+      expiresIn: 60 * 60,
+    });
+
     res.status(500).header('Token', token).send(`logged-in`);
   } catch (err) {
     res.send(err);
@@ -74,172 +71,119 @@ router.post('/login', async (req, res) => {
 });
 
 // route to get user details
-router.get('/get', async (req, res) => {
-  const token = req.headers.token;
-  if (!token) {
-    return res.send(
-      'Login required : Please login before accessing protected routes'
-    );
-  }
-
+router.get('/get', verify, async (req, res) => {
   try {
-    const valid = await Access.findOne({ access_token: token }, function(err,user){
-        if(user.expired()){
-            return res.send("login expired")
-        }
-    })
-    if (!valid) {
-      return res.send('Login error : please login again');
-    }
-    const user = await Client.findOne({ _id: valid.user_id });
+    const user = await Client.findOne({ _id: req.client._id });
     res.send(user);
   } catch (err) {
-      console.log(err)
-    return res.status(400).send('Invalid login');
+    res.status(400).send(err);
   }
 });
 
 // route to delete request
-router.put('/delete', async (req, res) => {
+router.put('/delete', verify, async (req, res) => {
   try {
-    const token = req.headers.token;
-    if (!token) {
-      return res.send(
-        'Login required : Please login before acces6012541ee340a974d5ab894bsing protected routes'
-      );
-    }
-
-    const valid = await await Access.findOne({ access_token: token }, function(err,user){
-        if(user.expired()){
-            return res.send("login expired")
-        }
-    })
-    const user = await Client.findOne({ _id: valid.user_id });
-    const deleted = await Client.deleteOne({ username: user.username });
-
-    if (deleted.deleteCount == 1) {
-      return res.send('User Deleted Successfully.');
-    }
+    await Client.deleteOne({ _id: req.client._id });
+    res.send('User Deleted');
   } catch (err) {
-    res.send('deletion Error');
+    res.send(err);
   }
 });
 
 // route to get all users
 router.get('/list/:page', async (req, res) => {
-  const page = parseInt(req.params.page);
-  if (page < 0) {
-    return res.send('Invalid request');
-  }
+  try {
+    const page = parseInt(req.params.page);
+    if (page < 0) {
+      return res.send('Invalid request');
+    }
 
-  const entries = (page + 1) * 10;
+    const startIndex = (page - 1) * 10;
+    const endIndex = page * 10;
 
-  const data = await Client.find({});
+    const data = await Client.find({});
 
-  if (data.length < entries - 10) {
-    return res.send(data);
-  } else if (entries - 10 < data.length < entries) {
-    return res.send(data.slice(entries - 10, data.length));
-  } else {
-    return res.send(data.slice((entries - 10, entries)));
+    const result = data.slice(startIndex, endIndex);
+    res.send(result);
+  } catch (err) {
+    res.status(400).send(err);
   }
 });
 
-router.post('/address', async (req,res)=> {
+router.post('/address', verify, async (req, res) => {
+  try {
+    const user = await Client.findOne({ _id: req.client._id });
 
-    try {
-        const token = req.headers.token;
-        if (!token) {
-          return res.send(
-            'Login required : Please login before accessing protected routes'
-          );
-        }
-    
-        const valid = await await Access.findOne({ access_token: token }, function(err,user){
-            if(user.expired()){
-                return res.send("login expired")
-            }
-        })
-        const user = await Client.findOne({ _id: valid.user_id });
-        const address = await Client.update({username:user.username},{$push : {address :{
-        id : user._id,
-        address : req.body.address,
-        city : req.body.city,
-        state : req.body.state, 
-        pin_code : req.body.pin_code,
-        phone_no : req.body.phone_no}}})
+    const address = new Address({
+      user_id: user._id,
+      address: req.body.address,
+      city: req.body.city,
+      state: req.body.state,
+      pin_code: req.body.pin_code,
+      phone_no: req.body.phone_no,
+    });
 
-        res.header('address-id',user._id).send(`address updates`);
-      } catch (err) {
-        res.send('Insertion Error');
-      }
-    
-})
+    const data = await address.save();
 
-router.get('/get/:id' , async (req,res) =>{
-    const user_id = req.params.id
-    try {
-        const token = req.headers.token;
-        if (!token) {
-          return res.send(
-            'Login required : Please login before accessing protected routes'
-          );
-        }
-    
-        const valid = await await Access.findOne({ access_token: token }, function(err,user){
-            if(user.expired()){
-                return res.send("login expired")
-            }
-        })
-        const user = await Client.findOne({ _id: user_id });
-        res.send(user.address)
-      } catch (err) {
-        res.send('deletion Error');
-      }
-})
+    const saved = await Client.updateOne(
+      { _id: user._id },
+      { $push: { address: data._id } }
+    );
+    res.send('address added');
+  } catch (err) {
+    res.status(400).send(err);
+  }
+});
 
-router.post('/forgotpassword', async (req,res) => {
-    try {
-        const user = await Client.findOne({username : req.body.username , email : req.body.email})
-        if (!user) { return res.send(`credentials entered are wrong`)}
+router.get('/get/:id', verify, async (req, res) => {
+  try {
+    const user_id = req.params.id;
 
-        const token = Math.floor(Math.random() * 10 ** 16);
-        const forgot = new Forgot({
-            username : req.body.username,
-            email : req.body.email,
-            forgot_token : token,
-        })
-        await forgot.save();
-        res.header('forgot_token',token).send(`use reset password link and forgot_token to reset password`)
-    }catch(err){
-        console.log(err)
-        res.send(`could not reset password`);
+    const user = await Client.findOne({ _id: req.client._id }).populate('address');
+    res.send(user);
+  } catch (err) {
+    res.send(err);
+  }
+});
+
+router.post('/forgotpassword', async (req, res) => {
+  try {
+    const user = await Client.findOne({
+      username: req.body.username,
+      email: req.body.email,
+    });
+    if (!user) {
+      return res.send(`credentials entered are wrong`);
     }
-})
 
-router.post('/resetpassword', async (req,res) => {
-    try{
-        const token = req.headers.forgot_token;
-        const forgot = await Forgot.findOne({forgot_token : token}, function (err,user){
-            if (user.expired()){
-                return res.send(`reset token expired`)
-            }
-        })
-        if (req.body.password != req.body.confirm_password){
-            return res.send('passwords do not match')
-        }
+    const token = jwt.sign({ email: req.body.email }, process.env.SECRET, {
+      expiresIn: 60 * 10,
+    });
+    res
+      .header('forgot_token', token)
+      .send(`use reset password link and forgot_token to reset password`);
+  } catch (err) {
+    res.send(err);
+  }
+});
 
-        const salt = await bcrypt.genSalt(10);
-        const password = await bcrypt.hash(req.body.password, salt);
-
-        const user = await Client.updateOne({username: req.body.username},{password : password});
-        res.send(`password has been successfully updated`)
-
-    }catch(err){
-        console.log(err)
-        res.send(`could not reset password`);
+router.post('/resetpassword', verify, async (req, res) => {
+  try {
+    if (req.body.password != req.body.confirm_password) {
+      return res.send('passwords do not match');
     }
-})
 
+    const salt = await bcrypt.genSalt(10);
+    const password = await bcrypt.hash(req.body.password, salt);
+
+    const user = await Client.updateOne(
+      { username: req.client.email },
+      { password: password }
+    );
+    res.send(`password has been successfully updated`);
+  } catch (err) {
+    res.send(err);
+  }
+});
 
 module.exports = router;

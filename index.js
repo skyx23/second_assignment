@@ -31,6 +31,3 @@ app.use('/user', routes);
 
 // server set upp
 app.listen(port, () => console.log(`listening`));
-
-
-// let a = Math.floor(Math.random()*(10**16));

@@ -1,6 +1,5 @@
 // importing mongoose ORM for Mongo
 const mongoose = require('mongoose');
-
 // designing Schema for Mongo
 const clients = mongoose.Schema(
   {
@@ -27,12 +26,15 @@ const clients = mongoose.Schema(
       required: true,
       max: 1024,
     },
-    address : {
-      type : Array
-    }
+    address: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Address',
+    }],
   },
   { versionKey: false }
 );
+
+
 
 // exporting Schemas
 module.exports = mongoose.model('Client', clients);
