@@ -4,8 +4,9 @@ const mongoose =  require('mongoose');
 //designing schema for access token
 const Address =  mongoose.Schema({
     user_id : {
-        type : String,
+        type : mongoose.Schema.Types.ObjectId,
         required : true,
+        ref : 'client'
     },
     address : {
         type : String

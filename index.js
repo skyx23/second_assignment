@@ -7,9 +7,12 @@ const mongoose = require('mongoose');
 const routes = require('./routes/route');
 // importing dotenv
 const dotenv = require('dotenv');
-// importing md5
-const md5 =  require('md5');
+const passport = require('passport');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 
+
+require('./middleware/passport')(passport);
 // initializing dotenv file
 dotenv.config();
 
@@ -24,10 +27,21 @@ mongoose.connect(
 const port = process.env.port || 5000;
 
 // middleware
+app.use(cookieParser());
+app.use(session({
+  secret: 'keyboard cat',
+  resave: false,
+  saveUninitialized: true,
+  cookie :{maxAge :   (60*60*1000)}
+}))
 app.use(express.json());
+app.use(passport.initialize());
+app.use(passport.session()); 
+
 
 // routing
 app.use('/user', routes);
 
 // server set upp
 app.listen(port, () => console.log(`listening`));
+
