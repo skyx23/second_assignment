@@ -4,6 +4,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 dotenv.config();
 const passport = require('passport');
+const sgMail = require('@sendgrid/mail');
+
+sgMail.setApiKey(process.env.API_KEY);
 
 const verify = require('../middleware/auth');
 const Client = require('../schema/clients');
@@ -31,6 +34,18 @@ router.post('/register', async (req, res) => {
       username: req.body.username,
       email: req.body.email,
       password: password,
+    });
+
+    const msg = {
+      to: req.body.email, // Change to your recipient
+      from: process.env.SENDER_EMAIL,
+      subject: 'User Registered',
+      text: `Your email have been registerd with username ${req.body.user}`,
+      html: `<strong>Your email have been registerd with username ${req.body.user}</strong>`,
+    }
+
+    await sgMail.send(msg).then(()=> {
+      console.log('msg sent')
     });
 
     const savedClient = await client.save();
@@ -73,6 +88,34 @@ router.get('/get', async (req, res) => {
   res.send(err)
 }
 });
+
+//route to update user
+router.patch('/update', async (req, res) => {
+  try{
+    if(req.isAuthenticated){
+      const user = await Client.updateOne(
+        {_id : req.headers.id},
+        {first_name : req.body.first_name,
+        last_name : req.body.last_name});
+
+        const msg = {
+          to: await Client.findOne({_id : req.headers.id}).email, // Change to your recipient
+          from: process.env.SENDER_EMAIL,
+          subject: 'User updated',
+          text: `Your details in the database have beem updated`,
+          html: `<strong>Your details in the database have beem updated</strong>`,
+        }
+    
+        await sgMail.send(msg).then(()=> {
+          console.log('msg sent')
+        });
+
+        res.send('user details updated')
+    }else(res.send('please log in'));
+  }catch(err){
+    res.send(err)
+  }
+})
 
 // route to delete request
 router.put('/delete',  async (req, res) => {
@@ -161,7 +204,17 @@ router.post('/forgotpassword', async (req, res) => {
     if (!user) {
       return res.send(`credentials entered are wrong`);
     }
+    const msg = {
+      to: user.email, // Change to your recipient
+      from: process.env.SENDER_EMAIL,
+      subject: 'User Requested forgot password',
+      text: `Your have requested for forgot password`,
+      html: `<strong>Your have requested for forgot password</strong>`,
+    }
 
+    await sgMail.send(msg).then(()=> {
+      console.log('msg sent')
+    });
     const token = jwt.sign({ email: req.body.email }, process.env.SECRET, {
       expiresIn: 60 * 10,
     });
@@ -186,6 +239,21 @@ router.post('/resetpassword', verify, async (req, res) => {
       { username: req.client.email },
       { password: password }
     );
+
+
+    const msg = {
+      to: req.client.email, // Change to your recipient
+      from: process.env.SENDER_EMAIL,
+      subject: 'User password updated',
+      text: `Your password has been updated in the database  as entered `,
+      html: `<strong>Your password has been updated in the database  as entered </strong>`,
+    }
+
+    await sgMail.send(msg).then(()=> {
+      console.log('msg sent')
+    });
+
+
     res.send(`password has been successfully updated`);
   } catch (err) {
     res.send(err);
