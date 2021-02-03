@@ -24,7 +24,7 @@ mongoose.connect(
 );
 
 // getting port from enviroment
-const port = process.env.port || 5000;
+const port = process.env.port || 5001;
 
 // middleware
 app.use(cookieParser());

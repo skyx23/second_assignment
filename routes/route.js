@@ -5,6 +5,9 @@ const jwt = require('jsonwebtoken');
 dotenv.config();
 const passport = require('passport');
 const sgMail = require('@sendgrid/mail');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 
 sgMail.setApiKey(process.env.API_KEY);
 
@@ -12,11 +15,13 @@ const verify = require('../middleware/auth');
 const Client = require('../schema/clients');
 const Address = require('../schema/address');
 
-
 //route to regiester new user
 router.post('/register', async (req, res) => {
   try {
-    const name = await Client.find({ username: req.body.username , email : req.body.email });
+    const name = await Client.find({
+      username: req.body.username,
+      email: req.body.email,
+    });
     if (name.length != 0) {
       return res.send('username or email already exits');
     }
@@ -42,10 +47,10 @@ router.post('/register', async (req, res) => {
       subject: 'User Registered',
       text: `Your email have been registerd with username ${req.body.user}`,
       html: `<strong>Your email have been registerd with username ${req.body.user}</strong>`,
-    }
+    };
 
-    await sgMail.send(msg).then(()=> {
-      console.log('msg sent')
+    await sgMail.send(msg).then(() => {
+      console.log('msg sent');
     });
 
     const savedClient = await client.save();
@@ -57,123 +62,121 @@ router.post('/register', async (req, res) => {
   }
 });
 
+router.post('/login', async (req, res, next) => {
+  try {
+    passport.authenticate('local', {
+      successRedirect: 'user/login',
+      failureRedirect: 'user/errlogin',
+    })(req, res, next);
+  } catch (err) {
+    res.send(err);
+  }
+});
 
-router.post('/login', async (req, res , next) => {
-  try{
-  passport.authenticate('local',{
-    successRedirect : 'user/login',
-    failureRedirect :'user/errlogin'
-  })(req,res,next);
-}catch(err){
-  res.send(err)
-}
-})
+router.get('/user/login', (req, res) => {
+  res.header('id', req.user._id).send(`user logged in `);
+});
 
-router.get('/user/login', (req,res) => {
-
-  res.header('id',req.user._id).send(`user logged in ` )
-})
-
-router.get('/user/errlogin', (req,res) => {
-  res.send('could not log-in')
-})
+router.get('/user/errlogin', (req, res) => {
+  res.send('could not log-in');
+});
 // route to get user details
 router.get('/get', async (req, res) => {
-  try{
-  if (req.isAuthenticated) {
-    const user = await Client.findOne({_id : req.headers.id})
-    res.send(user)
-  }else(res.send('please log in'))
-}catch(err){
-  res.send(err)
-}
+  try {
+    if (req.isAuthenticated) {
+      const user = await Client.findOne({ _id: req.headers.id });
+      res.send(user);
+    } else res.send('please log in');
+  } catch (err) {
+    res.send(err);
+  }
 });
 
 //route to update user
 router.patch('/update', async (req, res) => {
-  try{
-    if(req.isAuthenticated){
+  try {
+    if (req.isAuthenticated) {
       const user = await Client.updateOne(
-        {_id : req.headers.id},
-        {first_name : req.body.first_name,
-        last_name : req.body.last_name});
+        { _id: req.headers.id },
+        { first_name: req.body.first_name, last_name: req.body.last_name }
+      );
 
-        const msg = {
-          to: await Client.findOne({_id : req.headers.id}).email, // Change to your recipient
-          from: process.env.SENDER_EMAIL,
-          subject: 'User updated',
-          text: `Your details in the database have beem updated`,
-          html: `<strong>Your details in the database have beem updated</strong>`,
-        }
-    
-        await sgMail.send(msg).then(()=> {
-          console.log('msg sent')
-        });
+      const msg = {
+        to: await Client.findOne({ _id: req.headers.id }).email, // Change to your recipient
+        from: process.env.SENDER_EMAIL,
+        subject: 'User updated',
+        text: `Your details in the database have beem updated`,
+        html: `<strong>Your details in the database have beem updated</strong>`,
+      };
 
-        res.send('user details updated')
-    }else(res.send('please log in'));
-  }catch(err){
-    res.send(err)
+      await sgMail.send(msg).then(() => {
+        console.log('msg sent');
+      });
+
+      res.send('user details updated');
+    } else res.send('please log in');
+  } catch (err) {
+    res.send(err);
   }
-})
+});
 
 // route to delete request
-router.put('/delete',  async (req, res) => {
-  try{
+router.put('/delete', async (req, res) => {
+  try {
     if (req.isAuthenticated) {
-      const user = await Client.deleteOne({_id : req.headers.id})
-      res.send('user deleted')
-    }else(res.send('please log in'))
-  }catch(err){
-    res.send(err)
+      const user = await Client.deleteOne({ _id: req.headers.id });
+      res.send('user deleted');
+    } else res.send('please log in');
+  } catch (err) {
+    res.send(err);
   }
 });
 
 // route to get all users
 router.get('/list/:page', async (req, res) => {
   try {
-    if(req.isAuthenticated){
+    if (req.isAuthenticated) {
       const page = parseInt(req.params.page);
-    if (page < 0) {
-      return res.send('Invalid request');
-    }
+      if (page < 0) {
+        return res.send('Invalid request');
+      }
 
-    const startIndex = (page - 1) * 10;
+      const startIndex = (page - 1) * 10;
 
-    const data = await Client.find({}).limit(10).skip(startIndex)
+      const data = await Client.find({}).limit(10).skip(startIndex);
 
-    res.send(data);
-    }else{
-      res.send('please log in')
+      res.send(data);
+    } else {
+      res.send('please log in');
     }
   } catch (err) {
     res.status(400).send(err);
   }
 });
 
-router.post('/address',  async (req, res) => {
+router.post('/address', async (req, res) => {
   try {
-    if(req.isAuthenticated){
+    if (req.isAuthenticated) {
       const user = await Client.findOne({ _id: req.headers.id });
 
-    const address = new Address({
-      user_id: user._id,
-      address: req.body.address,
-      city: req.body.city,
-      state: req.body.state,
-      pin_code: req.body.pin_code,
-      phone_no: req.body.phone_no,
-    });
+      const address = new Address({
+        user_id: user._id,
+        address: req.body.address,
+        city: req.body.city,
+        state: req.body.state,
+        pin_code: req.body.pin_code,
+        phone_no: req.body.phone_no,
+      });
 
-    const data = await address.save();
+      const data = await address.save();
 
-    const saved = await Client.updateOne(
-      { _id: user._id },
-      { $push: { address: data._id } }
-    );
-    res.send('address added');
-    }else{
-      res.send('please log in')
+      const saved = await Client.updateOne(
+        { _id: user._id },
+        { $push: { address: data._id } }
+      );
+      res.send('address added');
+    } else {
+      res.send('please log in');
     }
   } catch (err) {
     res.status(400).send(err);
@@ -182,13 +185,13 @@ router.post('/address',  async (req, res) => {
 
 router.get('/get/:id', verify, async (req, res) => {
   try {
-    if(req.isAuthenticated){
+    if (req.isAuthenticated) {
       const user_id = req.params.id;
 
-    const user = await Client.findOne({ _id: user_id }).populate('address');
-    res.send(user);
-    }else {
-      res.send('please log in')
+      const user = await Client.findOne({ _id: user_id }).populate('address');
+      res.send(user);
+    } else {
+      res.send('please log in');
     }
   } catch (err) {
     res.send(err);
@@ -210,10 +213,10 @@ router.post('/forgotpassword', async (req, res) => {
       subject: 'User Requested forgot password',
       text: `Your have requested for forgot password`,
       html: `<strong>Your have requested for forgot password</strong>`,
-    }
+    };
 
-    await sgMail.send(msg).then(()=> {
-      console.log('msg sent')
+    await sgMail.send(msg).then(() => {
+      console.log('msg sent');
     });
     const token = jwt.sign({ email: req.body.email }, process.env.SECRET, {
       expiresIn: 60 * 10,
@@ -240,24 +243,120 @@ router.post('/resetpassword', verify, async (req, res) => {
       { password: password }
     );
 
-
     const msg = {
       to: req.client.email, // Change to your recipient
       from: process.env.SENDER_EMAIL,
       subject: 'User password updated',
       text: `Your password has been updated in the database  as entered `,
       html: `<strong>Your password has been updated in the database  as entered </strong>`,
-    }
+    };
 
-    await sgMail.send(msg).then(()=> {
-      console.log('msg sent')
+    await sgMail.send(msg).then(() => {
+      console.log('msg sent');
     });
-
 
     res.send(`password has been successfully updated`);
   } catch (err) {
     res.send(err);
   }
 });
+
+router.get('/mobiles', async (req, res) => {
+  try {
+    const url = process.env.MOBILE_URL;
+    const response = await axios.get(url);
+    const $ = cheerio.load(response.data);
+    let mobiles = [];
+    const data = $('._2kHMtA');
+    data.each((i,element)=> {
+      let title = $(element).find($('._4rR01T')).text()
+      let price = $(element).find($('._30jeq3')).text()
+      let specs = [];
+      $(element).find($('.rgWa7D')).each((i,element)=>{
+        let spec = $(element).text()
+        specs.push(spec);
+      })
+      mobiles.push({
+        title : title,
+        price : price,
+        specs : specs
+      })
+    })
+    res.send(mobiles)
+  } catch (error) {
+    res.send(err);
+  }
+});
+
+router.get('/mobiles/info' , async (req, res) =>{
+  try {
+    const url = process.env.MOBILE_URL;
+  const browser = await puppeteer.launch({
+    headless: true,
+    defaultViewport: { width: 1024, height: 1600 },
+  });
+  const page = await browser.newPage();
+
+  await page.goto(url, { waitUntil: 'load' });
+  console.log('page opening');
+  await page.waitForSelector('._2kHMtA');
+
+  let data = [];
+  const divs = await page.$$('._2kHMtA');
+  for (let div of divs) {
+    const name = await div.$eval('._4rR01T', (div) => {
+      return div.innerHTML;
+    });
+    const price = await div.$eval('._30jeq3', (div) => {
+      return div.innerHTML;
+    });
+    const lin = await div.$eval('a', (div) => {
+      return div.getAttribute('href')
+    }) 
+    const link = `https://www.flipkart.com${lin}` 
+    const newPage = await browser.newPage();
+    await newPage.goto(link,{waitUntil : 'load'});
+
+    const description = await newPage.$eval('._1mXcCf ', (div)=> {
+      return div.innerHTML;
+    })
+    await newPage.close();
+
+    data.push({
+      name : name,
+      price : price,
+      link : link,
+      description : description
+    });
+  }
+  res.send(data);
+  } catch (error) {
+    res.send(error)
+  }
+})
+
+router.get('/tshirts', async (req, res ) => {
+  try {
+    const url = process.env.TSHIRT_URL
+    const response = await axios.get(url);
+    const $ = cheerio.load(response.data);
+    let tshirts = [];
+    const data = $('._1xHGtK');
+    data.each((i,element)=> {
+      let company = $(element).find($('._2WkVRV')).text();
+      let title = $(element).find($('.IRpwTa')).text()
+      let price = $(element).find($('._30jeq3')).text()
+      tshirts.push({
+        title : title,
+        company : company,
+        price : price
+      })
+    })
+    res.send(tshirts)
+  } catch (error) {
+    console.log(error)
+    res.send(error);
+  }
+})
 
 module.exports = router;
