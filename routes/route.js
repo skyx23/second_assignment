@@ -74,69 +74,65 @@ router.post('/login', async (req, res, next) => {
 });
 
 router.get('/user/login', (req, res) => {
-  res.header('id', req.user._id).send(`user logged in `);
+  const token = jwt.sign({ _id: req.user._id }, process.env.SECRET, {
+    expiresIn: 60 * 60,
+  });
+  res.header('token', token).send(`user logged in `);
 });
 
 router.get('/user/errlogin', (req, res) => {
   res.send('could not log-in');
 });
 // route to get user details
-router.get('/get', async (req, res) => {
+router.get('/get',verify ,  async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const user = await Client.findOne({ _id: req.headers.id });
-      res.send(user);
-    } else res.send('please log in');
+    const user = await Client.findOne({ _id: req.client._id });
+    res.send(user);
   } catch (err) {
     res.send(err);
   }
 });
 
 //route to update user
-router.patch('/update', async (req, res) => {
+router.patch('/update',verify, async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const user = await Client.updateOne(
-        { _id: req.headers.id },
-        { first_name: req.body.first_name, last_name: req.body.last_name }
-      );
+    const user = await Client.updateOne(
+      { _id: req.client._id },
+      { first_name: req.body.first_name, last_name: req.body.last_name }
+    );
 
-      const msg = {
-        to: await Client.findOne({ _id: req.headers.id }).email, // Change to your recipient
-        from: process.env.SENDER_EMAIL,
-        subject: 'User updated',
-        text: `Your details in the database have beem updated`,
-        html: `<strong>Your details in the database have beem updated</strong>`,
-      };
+    const msg = {
+      to: await Client.findOne({ _id: req.headers.id }).email, // Change to your recipient
+      from: process.env.SENDER_EMAIL,
+      subject: 'User updated',
+      text: `Your details in the database have beem updated`,
+      html: `<strong>Your details in the database have beem updated</strong>`,
+    };
 
-      await sgMail.send(msg).then(() => {
-        console.log('msg sent');
-      });
+    await sgMail.send(msg).then(() => {
+      console.log('msg sent');
+    });
 
-      res.send('user details updated');
-    } else res.send('please log in');
+    res.send('user details updated');
   } catch (err) {
     res.send(err);
   }
 });
 
 // route to delete request
-router.put('/delete', async (req, res) => {
+router.put('/delete', verify,async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const user = await Client.deleteOne({ _id: req.headers.id });
+    const user = await Client.deleteOne({ _id: req.client._id });
       res.send('user deleted');
-    } else res.send('please log in');
   } catch (err) {
     res.send(err);
   }
 });
 
 // route to get all users
-router.get('/list/:page', async (req, res) => {
+router.get('/list/:page',verify, async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const page = parseInt(req.params.page);
+    const page = parseInt(req.params.page);
       if (page < 0) {
         return res.send('Invalid request');
       }
@@ -146,18 +142,14 @@ router.get('/list/:page', async (req, res) => {
       const data = await Client.find({}).limit(10).skip(startIndex);
 
       res.send(data);
-    } else {
-      res.send('please log in');
-    }
   } catch (err) {
     res.status(400).send(err);
   }
 });
 
-router.post('/address', async (req, res) => {
+router.post('/address',verify, async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const user = await Client.findOne({ _id: req.headers.id });
+    const user = await Client.findOne({ _id: req.client._id });
 
       const address = new Address({
         user_id: user._id,
@@ -175,9 +167,6 @@ router.post('/address', async (req, res) => {
         { $push: { address: data._id } }
       );
       res.send('address added');
-    } else {
-      res.send('please log in');
-    }
   } catch (err) {
     res.status(400).send(err);
   }
@@ -185,14 +174,10 @@ router.post('/address', async (req, res) => {
 
 router.get('/get/:id', verify, async (req, res) => {
   try {
-    if (req.isAuthenticated) {
-      const user_id = req.params.id;
+    const user_id = req.params.id;
 
-      const user = await Client.findOne({ _id: user_id }).populate('address');
-      res.send(user);
-    } else {
-      res.send('please log in');
-    }
+    const user = await Client.findOne({ _id: user_id }).populate('address');
+    res.send(user);
   } catch (err) {
     res.send(err);
   }
@@ -229,22 +214,24 @@ router.post('/forgotpassword', async (req, res) => {
   }
 });
 
-router.post('/resetpassword', verify, async (req, res) => {
+router.post('/resetpassword', async (req, res) => {
   try {
+    const token = req.header('forgot-token');
+    if(!token){return res.send("forgot token required")}
     if (req.body.password != req.body.confirm_password) {
       return res.send('passwords do not match');
     }
-
+    const verify = jwt.verify(token,process.env.SECRET);
     const salt = await bcrypt.genSalt(10);
     const password = await bcrypt.hash(req.body.password, salt);
 
     const user = await Client.updateOne(
-      { username: req.client.email },
+      { _id : verify._id},
       { password: password }
     );
 
     const msg = {
-      to: req.client.email, // Change to your recipient
+      to: await Client.findById({_id : verify._id}.email), // Change to your recipient
       from: process.env.SENDER_EMAIL,
       subject: 'User password updated',
       text: `Your password has been updated in the database  as entered `,
