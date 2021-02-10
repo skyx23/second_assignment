@@ -20,6 +20,7 @@ sgMail.setApiKey(process.env.API_KEY);
 const verify = require('../middleware/auth');
 const Client = require('../schema/clients');
 const Address = require('../schema/address');
+const { response } = require('express');
 
 //route to regiester new user
 router.post('/register', async (req, res) => {
@@ -390,4 +391,36 @@ router.get('/tshirts', async (req, res) => {
   }
 });
 
+router.get('/mobile/getinfo', async (req, res) => {
+  try {
+    const url = process.env.MOBILE_URL;
+    let links = []; 
+    await axios.get(url).then((response)=>{
+      const $ = cheerio.load(response.data);
+      const data = $('._2kHMtA');
+      data.each((i,element)=>{
+        let lin = $(element).find($('a')).attr('href');
+        let link = `https://www.flipkart.com${lin}`;
+        links.push(link);
+      })
+    });
+    let mobiles = [];
+    for (let i in links ){
+      await axios.get(links[i]).then((response)=> {
+        const $ = cheerio.load(response.data);
+        const title = $('.B_NuCI').text();
+        const price = $('._16Jk6d').text();
+        const description = $('._1mXcCf ').text();
+        mobiles.push({
+          title : title,
+          price : price,
+          description : description
+        })
+      })
+    }
+    res.send(mobiles)
+  } catch (error) {
+    res.send(error);
+  }
+});
 module.exports = router;
