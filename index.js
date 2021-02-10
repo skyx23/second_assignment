@@ -10,7 +10,7 @@ const dotenv = require('dotenv');
 const passport = require('passport');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
-
+const fileupload = require('express-fileupload');
 
 require('./middleware/passport')(passport);
 // initializing dotenv file
@@ -27,21 +27,26 @@ mongoose.connect(
 const port = process.env.port || 5001;
 
 // middleware
+app.use(
+  fileupload({
+    useTempFiles: true,
+  })
+);
 app.use(cookieParser());
-app.use(session({
-  secret: 'keyboard cat',
-  resave: false,
-  saveUninitialized: true,
-  cookie :{maxAge :   (60*60*1000)}
-}))
+app.use(
+  session({
+    secret: 'keyboard cat',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { maxAge: 60 * 60 * 1000 },
+  })
+);
 app.use(express.json());
 app.use(passport.initialize());
-app.use(passport.session()); 
-
+app.use(passport.session());
 
 // routing
 app.use('/user', routes);
 
 // server set upp
 app.listen(port, () => console.log(`listening`));
-

@@ -26,15 +26,18 @@ const clients = mongoose.Schema(
       required: true,
       max: 1024,
     },
-    address: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Address',
-    }],
+    profilepic: {
+      type: String,
+    },
+    address: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Address',
+      },
+    ],
   },
   { versionKey: false }
 );
-
-
 
 // exporting Schemas
 module.exports = mongoose.model('Client', clients);
