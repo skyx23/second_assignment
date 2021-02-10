@@ -9,6 +9,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
 const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
 
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -104,25 +105,26 @@ router.patch('/profilepic', verify, async (req, res) => {
   try {
     const file = req.files.profilepic;
     if (!file)
-      return res.send({
-        status: '0',
-        message: 'failure',
-        data: 'please upload the file you want as profile pic',
-      });
+    return res.send({
+      status: '0',
+      message: 'failure',
+      data: 'please upload the file you want as profile pic',
+    });
     const result = await cloudinary.uploader.upload(file.tempFilePath);
     const user = await Client.updateOne(
       { _id: req.client._id },
       { profilepic: result.url }
-    );
-    if (!user) {
-      return res.send({
-        status: '0',
-        message: 'failure',
-        data: 'could not update image',
-      });
-    }
-    res.send({
-      status: '1',
+      );
+      if (!user) {
+        return res.send({
+          status: '0',
+          message: 'failure',
+          data: 'could not update image',
+        });
+      }
+      fs.unlinkSync(file.tempFilePath);
+      res.send({
+        status: '1',
       message: 'success',
       data: 'successfully uploaded prfile image',
     });
